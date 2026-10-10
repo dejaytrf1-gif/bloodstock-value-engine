@@ -70,6 +70,27 @@ def catalogue_xls():
         except Exception:pass
     return pd.DataFrame()
 
+def source_diagnostics():
+    """Report response structure without exposing cookies or credentials."""
+    try:
+        r=get(BASE)
+        soup=BeautifulSoup(r.content,'lxml')
+        tables=soup.find_all('table')
+        anchors=soup.find_all('a',href=True)
+        xls=[a.get('href','') for a in anchors if 'xls' in a.get_text(' ',strip=True).lower() or 'xls' in a.get('href','').lower()]
+        title=soup.title.get_text(' ',strip=True)[:100] if soup.title else '(none)'
+        return ('source diagnostic: HTTP '+str(r.status_code)+
+                '; final_host='+str(requests.utils.urlparse(r.url).hostname)+
+                '; content_type='+str(r.headers.get('content-type','unknown'))[:80]+
+                '; bytes='+str(len(r.content))+
+                '; tables='+str(len(tables))+
+                '; rows='+str(sum(len(t.find_all('tr')) for t in tables))+
+                '; links='+str(len(anchors))+
+                '; xls_links='+str(len(xls))+
+                '; title='+title)
+    except Exception as exc:
+        return 'source diagnostic failed: '+type(exc).__name__+': '+str(exc)[:180]
+
 def load_comparables():
     """Optional licensed, automatically supplied CSV; never required for catalogue ingestion.
     Required: sire, sex, price_gns, sale_year. This is NOT user entry: plug in an authorised export/feed.
@@ -127,7 +148,7 @@ def main():
             errors.append(f'{source.__name__}: only {len(df)} parsed rows')
         except Exception as exc:errors.append(f'{source.__name__}: {exc}')
     else:
-        raise RuntimeError('Official catalogue could not be parsed. No rankings fabricated. '+ ' | '.join(errors))
+        raise RuntimeError('Official catalogue could not be parsed. No rankings fabricated. '+ ' | '.join(errors) + ' | ' + source_diagnostics())
     if not (df['lot'].astype(str).str.match(r'^\d{3,4}[A-Z]?$')).all():
         raise RuntimeError('Unexpected lot numbers: refusing to publish output')
     ranked=rank(df)
