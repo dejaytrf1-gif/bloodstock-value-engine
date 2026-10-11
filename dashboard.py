@@ -197,6 +197,24 @@ if st.button("Inspect Tattersalls response"):
                 for cell in cells
             ])
 
+st.subheader("Actual horse row inspection")
+
+for tr in soup.select("tr"):
+    cells = tr.find_all("td", recursive=False)
+    values = [
+        cell.get_text(" ", strip=True)
+        for cell in cells
+    ]
+
+    if any(
+        "Kodiac" in value or "Ghaiyyath" in value
+        for value in values
+    ):
+        st.write("Number of cells:", len(cells))
+        st.write("Cell contents:", values)
+        st.code(str(tr)[:4000], language="html")
+        break
+
         st.subheader("Response preview")
         st.code(soup.get_text(" ", strip=True)[:1500])
 
