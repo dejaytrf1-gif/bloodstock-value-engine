@@ -7,7 +7,7 @@ from engine import main, OUT
 
 st.set_page_config(page_title='Book 2 | Bloodstock Value Engine', page_icon='🐎', layout='wide')
 st.title('🐎 Bloodstock Value Engine')
-st.caption('Tattersalls October Book 2 • Catalogue screening, not validated valuation or racing prediction')
+st.caption('Tattersalls October Book 2 • V4 dual research queues • Not validated valuations or racing predictions')
 OUT.mkdir(parents=True, exist_ok=True)
 manifest_file = OUT / 'manifest.json'
 file = OUT / 'all_lots.csv'
@@ -88,26 +88,43 @@ st.info('Scores and valuations require independently verified racing outcomes an
 
 tab_r, tab_p, tab_i, tab_all = st.tabs(['🏇 Racing research', '📈 Pinhooking research', '📝 My inspections', '📚 Full catalogue'])
 
-# Both research queues are explicitly heuristic; catalogue signals alone cannot estimate racing merit or profit.
+# Separate research queues: racing pedigree review versus documented resale-market evidence.
 active['review_flag'] = active.pedigree_update.astype(int)
 active['sire_count'] = active.groupby('sire')['lot'].transform('size')
 active['research_priority'] = active['review_flag'] * 2 + (active['sire_count'] <= 3).astype(int)
-active = active.sort_values(['research_priority','lot'], ascending=[False,True])
-show_cols = [x for x in ['lot','day','sire','dam','sex','consignor','stabling','pedigree_update','research_priority'] if x in active.columns]
+racing_queue = active.sort_values(['research_priority', 'lot'], ascending=[False, True])
+show_cols = [x for x in ['lot','day','sire','dam','sex','consignor','stabling','pedigree_update','research_priority'] if x in racing_queue.columns]
+
+# Historical hammer prices are market context, NOT independent valuations or expected resale prices.
+commercial_queue = active.copy()
+for col in ['comparable_n', 'comparable_median_gns']:
+    if col not in commercial_queue.columns:
+        commercial_queue[col] = pd.NA
+    commercial_queue[col] = pd.to_numeric(commercial_queue[col], errors='coerce')
+commercial_queue['comparable_available'] = (
+    commercial_queue['comparable_n'].ge(8) & commercial_queue['comparable_median_gns'].gt(0)
+)
+commercial_queue = commercial_queue.sort_values(
+    ['comparable_available', 'comparable_n', 'lot'],
+    ascending=[False, False, True], na_position='last'
+)
+commercial_cols = [x for x in ['lot','day','sire','dam','sex','consignor','comparable_median_gns','comparable_n','confidence'] if x in commercial_queue.columns]
 
 with tab_r:
-    st.subheader('Top 20 — pedigree review queue')
-    st.caption('Sorted by pedigree-update flag and low sire representation in this catalogue. NOT a ranking of expected racing ability.')
-    st.dataframe(active.head(20)[show_cols], hide_index=True, use_container_width=True)
-    st.download_button('Download racing research queue', active.head(20)[show_cols].to_csv(index=False), 'book2_racing_research.csv', mime='text/csv')
-    st.warning('No validated racing score is available yet. A pedigree update is a prompt to investigate, not evidence of ability.')
+    st.subheader('Top 20 — racing pedigree investigation')
+    st.caption('Prioritises pedigree updates and less-represented sires for further research. These signals do NOT predict racing performance.')
+    st.dataframe(racing_queue.head(20)[show_cols], hide_index=True, use_container_width=True)
+    st.download_button('Download racing research queue', racing_queue.head(20)[show_cols].to_csv(index=False), 'book2_racing_research.csv', mime='text/csv')
+    st.warning('Racing merit cannot be scored reliably until verified runner, family and physical-inspection evidence is linked.')
 
 with tab_p:
-    st.subheader('Top 20 — commercial review queue')
-    st.caption('Provisional catalogue-review queue only. Without sale comparables and resale-market data, this cannot identify undervaluation or profit.')
-    st.dataframe(active.head(20)[show_cols], hide_index=True, use_container_width=True)
-    st.download_button('Download commercial research queue', active.head(20)[show_cols].to_csv(index=False), 'book2_pinhook_research.csv', mime='text/csv')
-    st.warning('This list currently shares the same catalogue-only ordering as racing research. No pinhooking valuation is implied.')
+    st.subheader('Top 20 — commercial comparable research')
+    st.caption('Sorted by strength of historical sire/sex sale evidence (number of comparables), NOT by predicted profit or bargain potential.')
+    matched = int(commercial_queue['comparable_available'].sum())
+    st.metric('Active lots with at least 8 historical sire/sex comparables', matched)
+    st.dataframe(commercial_queue.head(20)[commercial_cols], hide_index=True, use_container_width=True)
+    st.download_button('Download commercial research queue', commercial_queue.head(20)[commercial_cols].to_csv(index=False), 'book2_pinhook_research.csv', mime='text/csv')
+    st.warning('A historical median is not a fair-value estimate. Without an asking/hammer price for this lot, resale assumptions and costs, no undervaluation or pinhooking profit can be calculated.')
 
 with tab_i:
     st.subheader('Inspection notebook')
@@ -174,79 +191,4 @@ if st.button("Test historical sales import"):
             st.subheader("Import diagnostics")
             st.json(json.loads(status_file.read_text()))
 
-
-
-st.divider()
-st.subheader("Historical Horse Row Inspector")
-
-if st.button("Inspect 2025 horse records"):
-    import requests
-    from bs4 import BeautifulSoup
-    from history import sale_url
-
-    try:
-        response = requests.get(
-            sale_url(2025),
-            headers={"User-Agent": "Mozilla/5.0"},
-            timeout=30
-        )
-        response.raise_for_status()
-
-        soup = BeautifulSoup(response.text, "lxml")
-
-        st.write("HTTP status:", response.status_code)
-        st.write("Total table rows:", len(soup.select("tr")))
-        
-        st.write("Final URL:", response.url)
-        st.write("Response size:", len(response.content))
-        st.write(
-            "Page title:",
-            soup.title.get_text(" ", strip=True)
-            if soup.title else "No title"
-        )
-        st.subheader("Response text preview")
-        st.code(response.text[:2000], language="html")
-
-        st.subheader("First 8 rows with a numeric lot")
-
-        found = 0
-
-        for tr in soup.select("tr"):
-            cells = tr.find_all(
-                ["td", "th"],
-                recursive=False
-            )
-
-            values = [
-                cell.get_text(" ", strip=True)
-                for cell in cells
-            ]
-
-            if not values:
-                continue
-
-            import re
-
-            first_value = values[0].strip()
-
-            if re.fullmatch(r"\d{2,4}[A-Z]?", first_value):
-                st.write("Cell count:", len(cells))
-                st.write("Cell values:", values)
-                st.code(str(tr)[:2000], language="html")
-                found += 1
-
-            if found >= 8:
-                break
-
-        if found == 0:
-            st.warning(
-                "No numeric lot rows matched. "
-                "Showing first 5 HTML rows instead."
-            )
-
-            for tr in soup.select("tr")[:5]:
-                st.code(str(tr)[:2000], language="html")
-
-    except Exception as exc:
-        st.error(str(exc))
 
