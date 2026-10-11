@@ -149,6 +149,16 @@ if st.button("Test historical sales import"):
     with st.spinner("Checking historical Tattersalls results..."):
         try:
             historical = import_history()
+            
+                historical.to_csv(
+                    OUT / "licensed_sales_history.csv",
+                    index=False
+                )
+                st.info(
+                    "Historical comparables saved. "
+                    "Refresh the catalogue to calculate sire/sex medians."
+                )
+
             st.success(
                 f"Imported {len(historical)} verified sale records."
             )
