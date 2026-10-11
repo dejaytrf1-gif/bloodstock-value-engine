@@ -106,14 +106,17 @@ def parse_page(html, url, year):
 def main():
     OUT.mkdir(exist_ok=True)
  
-    session = requests.Session()
-    session.headers.update(HEADERS)
+  session = requests.Session()
+session.headers.update(HEADERS)
 
-    # Establish a session with Tattersalls before requesting results.
+# Establish a session with Tattersalls.
+try:
     session.get(
         ROOT + "/4DCGI/Entry/MenuCatalogues",
         timeout=25
     )
+except requests.RequestException as exc:
+    print("Session initialization warning:", exc)
 
     # Diagnostic: inspect cookies received from the site.
     print(
@@ -125,8 +128,19 @@ def main():
     for year in YEARS:
         url=sale_url(year)
         try:
-            r=session.get(url,timeout=40);r.raise_for_status()
-            frame=parse_page(r.text,r.url,year)
+            r = session.get(url, timeout=40)
+r.raise_for_status()
+
+page_title = BeautifulSoup(r.text, "lxml").title
+title = page_title.get_text(" ", strip=True) if page_title else ""
+
+if "No Cookie" in title:
+    raise RuntimeError(
+        "Tattersalls returned a No Cookie page instead of sale results. "
+        "This is a website session issue, not a horse parsing issue."
+    )
+
+frame = parse_page(r.text, r.url, year)
             # Never silently accept partial or cookie/error pages.
             if len(frame)<300:raise ValueError(f'Only {len(frame)} sold records parsed; check day filter, table layout and cookie response')
             if frame.duplicated(['sale_year','lot']).any():raise ValueError('Duplicate lot IDs in response')
