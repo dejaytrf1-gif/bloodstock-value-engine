@@ -103,62 +103,111 @@ def parse_page(html, url, year):
     return pd.DataFrame(rows)
 
 
+
 def main():
     OUT.mkdir(exist_ok=True)
- 
-  session = requests.Session()
-session.headers.update(HEADERS)
 
-# Establish a session with Tattersalls.
-try:
-    session.get(
-        ROOT + "/4DCGI/Entry/MenuCatalogues",
-        timeout=25
-    )
-except requests.RequestException as exc:
-    print("Session initialization warning:", exc)
+    session = requests.Session()
+    session.headers.update(HEADERS)
 
-    # Diagnostic: inspect cookies received from the site.
+    # Establish a Tattersalls session.
+    try:
+        session.get(
+            ROOT + "/4DCGI/Entry/MenuCatalogues",
+            timeout=25
+        )
+    except requests.RequestException as exc:
+        print("Session initialization warning:", exc)
+
     print(
         "Tattersalls session cookie names:",
         list(session.cookies.keys())
     )
 
-    collected=[];reports=[]
+    collected = []
+    reports = []
+
     for year in YEARS:
-        url=sale_url(year)
+        url = sale_url(year)
+
         try:
             r = session.get(url, timeout=40)
-r.raise_for_status()
+            r.raise_for_status()
 
-page_title = BeautifulSoup(r.text, "lxml").title
-title = page_title.get_text(" ", strip=True) if page_title else ""
+            page_title = BeautifulSoup(r.text, "lxml").title
+            title = (
+                page_title.get_text(" ", strip=True)
+                if page_title else ""
+            )
 
-if "No Cookie" in title:
-    raise RuntimeError(
-        "Tattersalls returned a No Cookie page instead of sale results. "
-        "This is a website session issue, not a horse parsing issue."
+            if "no cookie" in title.lower():
+                raise RuntimeError(
+                    "Tattersalls returned a No Cookie page "
+                    "instead of sale results."
+                )
+
+            frame = parse_page(r.text, r.url, year)
+
+            if len(frame) < 300:
+                raise ValueError(
+                    f"Only {len(frame)} sold records parsed; "
+                    "check page layout or cookie response."
+                )
+
+            if frame.duplicated(["sale_year", "lot"]).any():
+                raise ValueError("Duplicate lot IDs in response")
+
+            collected.append(frame)
+
+            reports.append({
+                "year": year,
+                "status": "ok",
+                "rows": len(frame),
+                "url": r.url
+            })
+
+        except Exception as exc:
+            reports.append({
+                "year": year,
+                "status": "failed",
+                "error": str(exc),
+                "url": url
+            })
+
+    report = {
+        "run_utc": datetime.datetime.now(
+            datetime.timezone.utc
+        ).isoformat(),
+        "results": reports,
+        "note": (
+            "Historical hammer comparables, "
+            "not fair values or bid recommendations."
+        )
+    }
+
+    (OUT / "historical_import_status.json").write_text(
+        json.dumps(report, indent=2)
     )
 
-frame = parse_page(r.text, r.url, year)
-            # Never silently accept partial or cookie/error pages.
-            if len(frame)<300:raise ValueError(f'Only {len(frame)} sold records parsed; check day filter, table layout and cookie response')
-            if frame.duplicated(['sale_year','lot']).any():raise ValueError('Duplicate lot IDs in response')
-            collected.append(frame)
-            reports.append({'year':year,'status':'ok','rows':len(frame),'url':r.url})
-        except Exception as e:
-            reports.append({'year':year,'status':'failed','error':str(e),'url':url})
-    report={'run_utc':datetime.datetime.now(datetime.timezone.utc).isoformat(),
-            'results':reports,'note':'Prices are historical hammer comparables, not fair values or bid recommendations.'}
-    (OUT/'historical_import_status.json').write_text(json.dumps(report,indent=2))
-    if len(collected)!=len(YEARS):
-        raise RuntimeError('Historical import incomplete; existing data retained. '+json.dumps(reports))
-    data=pd.concat(collected,ignore_index=True)
-    target=OUT/'historical_sales.csv'
-    tmp=OUT/'historical_sales.csv.tmp'
-    data.to_csv(tmp,index=False)
+    if len(collected) != len(YEARS):
+        raise RuntimeError(
+            "Historical import incomplete; existing data retained. "
+            + json.dumps(reports)
+        )
+
+    data = pd.concat(collected, ignore_index=True)
+
+    target = OUT / "historical_sales.csv"
+    tmp = OUT / "historical_sales.csv.tmp"
+
+    data.to_csv(tmp, index=False)
     tmp.replace(target)
-    print(json.dumps(report,indent=2))
+
+    print(json.dumps(report, indent=2))
+
     return data
 
-if __name__=='__main__':main()
+
+if __name__ == "__main__":
+    main()
+
