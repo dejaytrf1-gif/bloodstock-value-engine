@@ -224,6 +224,16 @@ if st.button("Inspect 2025 horse records"):
 
         st.write("HTTP status:", response.status_code)
         st.write("Total table rows:", len(soup.select("tr")))
+        
+        st.write("Final URL:", response.url)
+        st.write("Response size:", len(response.content))
+        st.write(
+            "Page title:",
+            soup.title.get_text(" ", strip=True)
+            if soup.title else "No title"
+        )
+        st.subheader("Response text preview")
+        st.code(response.text[:2000], language="html")
 
         st.subheader("First 8 rows with a numeric lot")
 
