@@ -138,3 +138,27 @@ with tab_all:
     st.caption(f'{len(shown)} matching lots')
     st.dataframe(shown, hide_index=True, use_container_width=True)
     st.download_button('Download filtered catalogue', shown.to_csv(index=False), 'book2_filtered.csv', mime='text/csv')
+    
+st.divider()
+st.subheader("Historical Sales — V3 Test")
+st.caption("Test official Tattersalls Book 2 results for 2023–2025.")
+
+if st.button("Test historical sales import"):
+    from history import main as import_history
+
+    with st.spinner("Checking historical Tattersalls results..."):
+        try:
+            historical = import_history()
+            st.success(
+                f"Imported {len(historical)} verified sale records."
+            )
+            st.dataframe(historical.head(20))
+        except Exception as exc:
+            st.error("Historical import could not be completed.")
+            st.code(str(exc))
+
+        status_file = OUT / "historical_import_status.json"
+        if status_file.exists():
+            st.subheader("Import diagnostics")
+            st.json(json.loads(status_file.read_text()))
+
