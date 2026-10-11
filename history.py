@@ -105,9 +105,22 @@ def parse_page(html, url, year):
 
 def main():
     OUT.mkdir(exist_ok=True)
-    session=requests.Session();session.headers.update(HEADERS)
-    try:session.get(ROOT+'/4DCGI/Entry/MenuCatalogues',timeout=25)
-    except requests.RequestException:pass
+ 
+    session = requests.Session()
+    session.headers.update(HEADERS)
+
+    # Establish a session with Tattersalls before requesting results.
+    session.get(
+        ROOT + "/4DCGI/Entry/MenuCatalogues",
+        timeout=25
+    )
+
+    # Diagnostic: inspect cookies received from the site.
+    print(
+        "Tattersalls session cookie names:",
+        list(session.cookies.keys())
+    )
+
     collected=[];reports=[]
     for year in YEARS:
         url=sale_url(year)
