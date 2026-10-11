@@ -197,12 +197,8 @@ if st.button("Inspect Tattersalls response"):
                 for cell in cells
             ])
 
-st.subheader("Actual horse row inspection")
-
-
         st.subheader("Response preview")
         st.code(soup.get_text(" ", strip=True)[:1500])
 
     except Exception as exc:
         st.error(str(exc))
-
