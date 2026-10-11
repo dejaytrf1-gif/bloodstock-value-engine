@@ -29,34 +29,79 @@ def sale_url(year):
     )
 
 
+
 def parse_page(html, url, year):
-    soup=BeautifulSoup(html,'lxml')
-    rows=[]
+    soup = BeautifulSoup(html, 'lxml')
+    rows = []
+
     for tr in soup.select('tr'):
-        cells=tr.find_all('td',recursive=False)
-        if len(cells)<4: continue
-        vals=[norm(c.get_text(' ',strip=True)) for c in cells]
-        lot_match=re.match(r'^(\d{2,4}[A-Z]?)\b',vals[0],re.I)
-        if not lot_match or '/' not in vals[1]: continue
-        pedigree=vals[1]
-        sire,tail=pedigree.split('/',1)
-        sex_match=re.search(r'\b(?:B/Br|B/Gr|Br/Gr|Gr/Ro|Ch|Gr|Br|Ro|Bl|B)\.([CFG])\.',tail,re.I)
-        dam=tail[:sex_match.start()] if sex_match else tail
-        # Historical table typically: lot, pedigree, consignor, purchaser, price.
-        price_text=vals[-1].replace(',','').replace('gns','').strip()
-        if not re.fullmatch(r'\d+(?:\.0+)?',price_text): continue
-        price=int(float(price_text))
-        if price<=0: continue
-        purchaser=vals[-2] if len(vals)>=5 else ''
-        if re.search(r'\b(?:vendor|not sold|withdrawn|bought in)\b',purchaser,re.I):
-            # Private sales may follow vendor entries; exclude ambiguous records.
+        cells = tr.find_all('td', recursive=False)
+        if len(cells) < 5:
             continue
-        rows.append({'sale_year':year,'lot':lot_match.group(1).upper(),
-            'sire':norm(sire),'dam':norm(dam),
-            'sex':{'C':'Colt','F':'Filly','G':'Gelding'}.get(sex_match.group(1).upper(),'') if sex_match else '',
-            'consignor':vals[2],'purchaser':purchaser,'price_gns':price,
-            'source_url':url,'source_type':'official_tattersalls_results'})
+
+        vals = [
+            norm(c.get_text(' ', strip=True))
+            for c in cells
+        ]
+
+        lot_match = re.match(r'^(\d{2,4}[A-Z]?)$', vals[0], re.I)
+        if not lot_match:
+            continue
+
+        pedigree = vals[1]
+        if '/' not in pedigree:
+            continue
+
+        # Tattersalls historical results columns:
+        # LOT | NAME BY SIRE EX DAM | CONSIGNOR | PURCHASER | PRICE
+        sire, tail = pedigree.split('/', 1)
+
+        sex_match = re.search(
+            r'\b(?:B|Br|Ch|Gr|Ro|Bl)(?:/Br|/Gr|/Ro)?'
+            r'\.?\s*([CFG])\.',
+            tail,
+            re.I
+        )
+
+        dam = tail[:sex_match.start()] if sex_match else tail
+
+        purchaser = vals[-2]
+        price_text = vals[-1].replace(',', '').strip()
+
+        if not re.fullmatch(r'\d+', price_text):
+            continue
+
+        price = int(price_text)
+        if price <= 0:
+            continue
+
+        # Exclude bought-in and private-sale records.
+        if re.search(
+            r'vendor|withdrawn|not sold|bought in|\(P\.S\.\)',
+            purchaser,
+            re.I
+        ):
+            continue
+
+        rows.append({
+            'sale_year': year,
+            'lot': lot_match.group(1).upper(),
+            'sire': norm(sire),
+            'dam': norm(dam),
+            'sex': (
+                {'C': 'Colt', 'F': 'Filly', 'G': 'Gelding'}
+                .get(sex_match.group(1).upper(), '')
+                if sex_match else ''
+            ),
+            'consignor': vals[-3],
+            'purchaser': purchaser,
+            'price_gns': price,
+            'source_url': url,
+            'source_type': 'official_tattersalls_results'
+        })
+
     return pd.DataFrame(rows)
+
 
 def main():
     OUT.mkdir(exist_ok=True)
