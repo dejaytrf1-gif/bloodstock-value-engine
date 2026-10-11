@@ -162,3 +162,44 @@ if st.button("Test historical sales import"):
             st.subheader("Import diagnostics")
             st.json(json.loads(status_file.read_text()))
 
+st.divider()
+st.subheader("Tattersalls Connection Diagnostic")
+
+if st.button("Inspect Tattersalls response"):
+    import requests
+    from bs4 import BeautifulSoup
+    from history import sale_url
+
+    url = sale_url(2025)
+
+    try:
+        response = requests.get(
+            url,
+            headers={
+                "User-Agent": "Mozilla/5.0"
+            },
+            timeout=30
+        )
+
+        soup = BeautifulSoup(response.text, "lxml")
+
+        st.write("HTTP status:", response.status_code)
+        st.write("Final URL:", response.url)
+        st.write("Page title:", soup.title.get_text(strip=True) if soup.title else "None")
+        st.write("Number of table rows:", len(soup.select("tr")))
+        st.write("Number of table cells:", len(soup.select("td")))
+
+        st.subheader("First 15 table rows")
+        for tr in soup.select("tr")[:15]:
+            cells = tr.find_all(["th", "td"], recursive=False)
+            st.write([
+                cell.get_text(" ", strip=True)[:150]
+                for cell in cells
+            ])
+
+        st.subheader("Response preview")
+        st.code(soup.get_text(" ", strip=True)[:1500])
+
+    except Exception as exc:
+        st.error(str(exc))
+
