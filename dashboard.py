@@ -202,3 +202,47 @@ if st.button("Inspect Tattersalls response"):
 
     except Exception as exc:
         st.error(str(exc))
+
+st.divider()
+st.subheader("Historical Horse Row Inspector")
+
+if st.button("Inspect 2025 horse records"):
+    import requests
+    from bs4 import BeautifulSoup
+    from history import sale_url
+
+    try:
+        response = requests.get(
+            sale_url(2025),
+            headers={"User-Agent": "Mozilla/5.0"},
+            timeout=30
+        )
+        response.raise_for_status()
+
+        soup = BeautifulSoup(response.text, "lxml")
+        found = 0
+
+        for tr in soup.select("tr"):
+            cells = tr.find_all("td", recursive=False)
+            values = [
+                cell.get_text(" ", strip=True)
+                for cell in cells
+            ]
+
+            if any(
+                "Kodiac" in value or "Ghaiyyath" in value
+                for value in values
+            ):
+                st.write("Number of cells:", len(cells))
+                st.write("Cell contents:", values)
+                st.code(str(tr)[:3000], language="html")
+                found += 1
+
+            if found >= 2:
+                break
+
+        if found == 0:
+            st.warning("No matching horse records found.")
+
+    except Exception as exc:
+        st.error(str(exc))
