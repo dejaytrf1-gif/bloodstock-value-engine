@@ -18,9 +18,16 @@ HEADERS={'User-Agent':'Mozilla/5.0 (compatible; BloodstockValueEngine/0.3; resea
 def norm(s):
     return re.sub(r'\s+',' ',s or '').strip()
 
+
 def sale_url(year):
-    # Same URL grammar as the working 2026 catalogue, but whole-sale (day 0).
-    return ROOT+'/4DCGI/Entry/List?30%096%09=%20OC2%20'+str(year)[-2:]+'%09%250A30%0912%09=%200%09by8'
+    # Whole Sale URL confirmed in browser for 2025.
+    return (
+        ROOT
+        + '/4DCGI/Entry/List?30%096%09=%20OC2%20'
+        + str(year)[-2:]
+        + '%09by8'
+    )
+
 
 def parse_page(html, url, year):
     soup=BeautifulSoup(html,'lxml')
