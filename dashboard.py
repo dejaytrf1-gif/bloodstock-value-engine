@@ -203,6 +203,7 @@ if st.button("Inspect Tattersalls response"):
     except Exception as exc:
         st.error(str(exc))
 
+
 st.divider()
 st.subheader("Historical Horse Row Inspector")
 
@@ -220,29 +221,50 @@ if st.button("Inspect 2025 horse records"):
         response.raise_for_status()
 
         soup = BeautifulSoup(response.text, "lxml")
+
+        st.write("HTTP status:", response.status_code)
+        st.write("Total table rows:", len(soup.select("tr")))
+
+        st.subheader("First 8 rows with a numeric lot")
+
         found = 0
 
         for tr in soup.select("tr"):
-            cells = tr.find_all("td", recursive=False)
+            cells = tr.find_all(
+                ["td", "th"],
+                recursive=False
+            )
+
             values = [
                 cell.get_text(" ", strip=True)
                 for cell in cells
             ]
 
-            if any(
-                "Kodiac" in value or "Ghaiyyath" in value
-                for value in values
-            ):
-                st.write("Number of cells:", len(cells))
-                st.write("Cell contents:", values)
-                st.code(str(tr)[:3000], language="html")
+            if not values:
+                continue
+
+            import re
+
+            first_value = values[0].strip()
+
+            if re.fullmatch(r"\d{2,4}[A-Z]?", first_value):
+                st.write("Cell count:", len(cells))
+                st.write("Cell values:", values)
+                st.code(str(tr)[:2000], language="html")
                 found += 1
 
-            if found >= 2:
+            if found >= 8:
                 break
 
         if found == 0:
-            st.warning("No matching horse records found.")
+            st.warning(
+                "No numeric lot rows matched. "
+                "Showing first 5 HTML rows instead."
+            )
+
+            for tr in soup.select("tr")[:5]:
+                st.code(str(tr)[:2000], language="html")
 
     except Exception as exc:
         st.error(str(exc))
+
